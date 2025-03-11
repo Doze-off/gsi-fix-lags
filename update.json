@@ -1,6 +1,6 @@
 {
-  "version": "v1",
-  "versionCode": 1,
-  "zipUrl": "https://github.com/Doze-off/gsi-fix-lags/releases/download/V1/GSI.Lags.Fix.Low.device_V1.zip",
+  "version": "v2",
+  "versionCode": 2,
+  "zipUrl": "https://github.com/Doze-off/gsi-fix-lags/releases/download/V1/GSI.Lags.Fix.Low.device_V2.zip",
   "changelog": "https://raw.githubusercontent.com/Doze-off/gsi-fix-lags/GSi-fix-lags/changelog.md"
 }
