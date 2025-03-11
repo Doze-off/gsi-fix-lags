@@ -4,3 +4,4 @@ version=1
 versionCode=1
 author=@NedTOP
 description=Corrige lags na UI de GSIs com suporte universal (Adreno, Exynos, MTK).
+updateJson=https://raw.githubusercontent.com/Doze-off/gsi-fix-lags/GSi-fix-lags/update.json
