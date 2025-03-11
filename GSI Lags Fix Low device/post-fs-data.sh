@@ -1,46 +1,19 @@
 #!/system/bin/sh
 
-# CPU Dinâmica - Detecção automática e ajuste para qualquer governor
+# CPU - Força governador performance
 CPU_DIR="/sys/devices/system/cpu"
-
 if [ -d "$CPU_DIR" ]; then
     for cpu in $CPU_DIR/cpu[0-9]*; do
         if [ -f "$cpu/cpufreq/scaling_governor" ]; then
-            # Detecta o governor atual
-            CURRENT_GOV=$(cat "$cpu/cpufreq/scaling_governor")
-            
-            # Reaplica o governor detectado
-            echo "$CURRENT_GOV" > "$cpu/cpufreq/scaling_governor"
-            
-            # Ajustes específicos para cada governor
-            case "$CURRENT_GOV" in
-                schedutil)
-                    echo "200" > "$cpu/cpufreq/schedutil/up_rate_limit_us"
-                    echo "1000" > "$cpu/cpufreq/schedutil/down_rate_limit_us"
-                    ;;
-                interactive)
-                    echo "80" > "$cpu/cpufreq/interactive/boostpulse_duration"
-                    echo "20000" > "$cpu/cpufreq/interactive/min_sample_time"
-                    echo "95" > "$cpu/cpufreq/interactive/go_hispeed_load"
-                    echo "1" > "$cpu/cpufreq/interactive/io_is_busy"
-                    ;;
-                ondemand)
-                    echo "50" > "$cpu/cpufreq/ondemand/up_threshold"
-                    echo "20000" > "$cpu/cpufreq/ondemand/sampling_rate"
-                    ;;
-                conservative)
-                    echo "60" > "$cpu/cpufreq/conservative/up_threshold"
-                    echo "20" > "$cpu/cpufreq/conservative/down_threshold"
-                    ;;
-            esac
+            echo "performance" > "$cpu/cpufreq/scaling_governor"
         fi
     done
 fi
 
-# Ajustes de GPU (Adreno, Mali, Exynos)
+# GPU - Força performance
 if [ -d "/sys/class/kgsl/kgsl-3d0" ]; then
     echo "performance" > /sys/class/kgsl/kgsl-3d0/devfreq/governor
-    echo "1" > /sys/class/kgsl/kgsl-3d0/devfreq/adreno_min_pwrlevel
+    echo "0" > /sys/class/kgsl/kgsl-3d0/devfreq/adreno_min_pwrlevel
     echo "0" > /sys/class/kgsl/kgsl-3d0/devfreq/adreno_max_pwrlevel
 fi
 
@@ -48,81 +21,95 @@ if [ -d "/sys/devices/platform/mali.0" ]; then
     echo "performance" > /sys/devices/platform/mali.0/devfreq/governor
 fi
 
-# I/O Tweaks (dinâmico)
+# I/O - Ajustes no agendador
 if [ -f "/sys/block/mmcblk0/queue/scheduler" ]; then
-    CURRENT_SCHED=$(cat /sys/block/mmcblk0/queue/scheduler | grep -o '\\[.*\\]' | tr -d '[]')
-    case "$CURRENT_SCHED" in
-        cfq|noop|deadline|mq-deadline)
-            echo "$CURRENT_SCHED" > /sys/block/mmcblk0/queue/scheduler
-            ;;
-        *)
-            echo "noop" > /sys/block/mmcblk0/queue/scheduler 
-            ;;
-    esac
+    echo "deadline" > /sys/block/mmcblk0/queue/scheduler
 fi
-
 if [ -f "/sys/block/mmcblk0/queue/read_ahead_kb" ]; then
-    echo "1024" > /sys/block/mmcblk0/queue/read_ahead_kb
+    echo "2048" > /sys/block/mmcblk0/queue/read_ahead_kb
 fi
 
-# Ajustes gerais do sistema
-setprop persist.sys.force_highendgfx true
+# Melhorar gerenciamento de memória para aplicativos
+echo "0" > /proc/sys/vm/oom_kill_allocating_task
+echo "1" > /proc/sys/vm/overcommit_memory
+echo "100" > /proc/sys/vm/overcommit_ratio
+echo "1" > /proc/sys/vm/panic_on_oom
+
+# Priorizar processos de aplicativos
+setprop ro.vendor.qti.sys.fw.bservice_enable true
+setprop ro.vendor.qti.sys.fw.bservice_limit 5
+setprop ro.vendor.qti.sys.fw.bservice_age 5000
+
+# Ajustes de I/O para melhorar a leitura de dados
+for block in /sys/block/*/queue; do
+    echo "256" > "$block/nr_requests"
+    echo "1024" > "$block/read_ahead_kb"
+    echo "deadline" > "$block/scheduler"
+done
+
+# Otimização de renderização e UI
+setprop debug.sf.latch_unsignaled 1
+setprop debug.sf.early_phase_offset_ns 500000
+setprop debug.sf.early_app_phase_offset_ns 500000
+setprop debug.sf.early_gl_phase_offset_ns 3000000
+setprop debug.sf.early_gl_app_phase_offset_ns 15000000
+setprop debug.sf.high_fps_early_phase_offset_ns 6100000
+setprop debug.sf.high_fps_early_gl_phase_offset_ns 9000000
+setprop debug.sf.high_fps_late_app_phase_offset_ns 1000000
 setprop debug.sf.hw 1
-setprop debug.performance.tuning 1
-setprop persist.sys.scrollingcache 3
-setprop ro.hardware.egl.optimization 1
-setprop persist.sys.ui.hw true
-setprop debug.sf.latch_unsignaled 1 
-setprop debug.renderengine.backend gl
 setprop debug.sf.enable_hwc_vds 1
-setprop ro.surface_flinger.max_frame_latency 2  
-setprop ro.surface_flinger.max_frame_buffer_acquired_buffers 4
+setprop persist.sys.ui.hw true
+setprop ro.surface_flinger.max_frame_latency 1
 
-# Boost da UI
-echo "1" > /proc/sys/kernel/sched_boost
+# Desativar verificações desnecessárias
+setprop ro.config.hw_quickpoweron true
+setprop ro.config.hw_fast_dormancy 1
+setprop ro.config.hw_power_saving false
 
-# Function to write to a file
-write() {
-  local file="$1"
-  shift
+# Priorizar aplicativos em primeiro plano
+setprop ro.vendor.qti.sys.fw.bg_apps_limit 32
+setprop ro.vendor.qti.sys.fw.bg_cached_ratio 0.33
+setprop ro.vendor.qti.sys.fw.bg_empty_app_limit 8
 
-  [ -f "$file" ] && echo "$@" > "$file"
-}
+# Desativar animações desnecessárias
+setprop debug.sf.disable_backpressure 1
+setprop debug.sf.no_hw_vsync 1
+setprop persist.sys.force_sw_gles 0
 
-# update cpus for cpuset cgroup
-if [ -d /sys/devices/system/cpu/cpufreq/policy6 ]; then
-  write /dev/cpuset/foreground/cpus 0-7
-  write /dev/cpuset/foreground/boost/cpus 6-7
-  write /dev/cpuset/background/cpus 0-5
-  write /dev/cpuset/system-background/cpus 0-5
-  write /dev/cpuset/top-app/cpus 0-7
-  write /dev/cpuset/top-app/boost/cpus 6-7
-  write /dev/cpuset/ui/cpus 6-7
-else
-  write /dev/cpuset/foreground/cpus 0-7
-  write /dev/cpuset/foreground/boost/cpus 4-7
-  write /dev/cpuset/background/cpus 0-3
-  write /dev/cpuset/system-background/cpus 0-3
-  write /dev/cpuset/top-app/cpus 0-7
-  write /dev/cpuset/top-app/boost/cpus 4-7
-  write /dev/cpuset/ui/cpus 4-7
-fi
+# Limpeza de cache e memória
+sync
+echo 3 > /proc/sys/vm/drop_caches
 
-# Disable compaction proactiveness
-write /proc/sys/vm/compaction_proactiveness 0
+# Ajustes de rede
+setprop net.tcp.buffersize.default 4096,87380,256960,4096,16384,256960
+setprop net.tcp.buffersize.wifi 4096,87380,256960,4096,16384,256960
+setprop net.tcp.buffersize.umts 4096,87380,256960,4096,16384,256960
+setprop net.tcp.buffersize.gprs 4096,87380,256960,4096,16384,256960
+setprop net.tcp.buffersize.edge 4096,87380,256960,4096,16384,256960
 
-# Disable watermark boost
-write /proc/sys/vm/watermark_boost_factor 0
+# Ajustes de termal
+setprop vendor.thermal.enable false
+setprop vendor.thermal.engine 0
 
-# multi-gen LRU
-write /sys/kernel/mm/lru_gen/enabled y
+# Ajustes de prioridade de threads
+setprop ro.vendor.qti.sys.fw.use_trim_settings true
+setprop ro.vendor.qti.sys.fw.trim_empty_percent 50
+setprop ro.vendor.qti.sys.fw.trim_cache_percent 100
+setprop ro.vendor.qti.sys.fw.trim_enable_memory 1
 
-# zram
-write /sys/block/zram0/comp_algorithm lz4
-write /proc/sys/vm/page-cluster 3
-write /proc/sys/vm/swappiness 100
-write /sys/kernel/mm/swap/vma_ra_enabled true
+# RAM & ZRAM
+echo "lz4hc" > /sys/block/zram0/comp_algorithm
+echo "200" > /proc/sys/vm/swappiness
+echo "10" > /proc/sys/vm/page-cluster
+echo "1" > /sys/kernel/mm/swap/vma_ra_enabled
 
-# kernel
-write /proc/sys/kernel/sched_pelt_multiplier 4
-write /proc/sys/kernel/sched_util_clamp_min_rt_default 0
+# UI & Renderização
+setprop debug.hwui.renderer backend gl
+setprop persist.sys.sf.native_mode 1
+
+# Ajustes de desempenho geral
+setprop ro.config.low_ram true
+setprop persist.sys.scrollingcache 0
+setprop ro.HOME_APP_ADJ 0
+setprop video.accelerate.hw 1
+setprop debug.qctwa.statusbar 1
