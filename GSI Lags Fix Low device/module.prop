@@ -1,0 +1,6 @@
+id=gsi_lags_fix
+name=GSI Lags Fix
+version=1
+versionCode=1
+author=@NedTOP
+description=Corrige lags na UI de GSIs com suporte universal (Adreno, Exynos, MTK).
